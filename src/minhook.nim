@@ -26,14 +26,29 @@ proc hook*[T: proc](target: T, detour: ptr | pointer): T = hook(target, cast[T](
 
 ## The macro declares a procedure of the same signature, and name `ogProcCall`, for calling the original procedure.
 ## Macro body is the same as hooked procedure's body, i.e., all the rules of a normal procedure apply to the macro body.
-macro hook*(procType: untyped, procPtr: proc | pointer | ptr | int | uint, body: untyped) =
-  let symOgProc = newIdentNode("ogProcCall")
+macro mHook*(x: untyped, procPtr: proc | pointer | ptr | int | uint, body: untyped) =
+  var params = nnkFormalParams.newNimNode().add(x[2])
+  for child in x[1][1..^1]:
+    params.add(nnkIdentDefs.newTree(
+      child[0],
+      child[1],
+      newEmptyNode(),
+    ))
+
+  let procType = nnkProcTy.newTree(
+    params,
+    nnkPragma.newTree(x[1][0])
+  )
+  
   let symHkProc = genSym(nskProc)
-  let formalParams = procType[0]
+
   var bodyStatements = newNimNode(nnkStmtList).add(body)
   result = nnkStmtList.newTree()
   result.add(nnkVarSection.newTree(nnkIdentDefs.newTree(
-    symOgProc,
+    nnkPragmaExpr.newTree(
+      newIdentNode("ogProcCall"),
+      nnkPragma.newTree("global".ident)
+    ),
     procType,
     newNilLit()
   )))
@@ -41,8 +56,8 @@ macro hook*(procType: untyped, procPtr: proc | pointer | ptr | int | uint, body:
     symHkProc,
     newEmptyNode(),
     newEmptyNode(),
-    formalParams,
-    procType[1],
+    procType[0].copy,
+    procType[1].copy,
     newEmptyNode(),
     bodyStatements
   ))
@@ -51,8 +66,8 @@ macro hook*(procType: untyped, procPtr: proc | pointer | ptr | int | uint, body:
     symOgProc = hook(procPtr, symHkProc)
     enableHook(procPtr)
 
-  result.add(getAst(doHooks(symOgProc, symHkProc, procPtr)))
-
+  result.add(getAst(doHooks(newIdentNode("ogProcCall"), symHkProc, procPtr)))
+  
 proc enableHook*[T: ptr | proc | pointer](target: T) =
   let status = raw.MH_EnableHook(cast[LPVOID](target))
   if status != raw.MH_OK: raise newException(LibraryError,

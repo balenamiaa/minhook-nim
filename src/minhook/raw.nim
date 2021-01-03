@@ -4,6 +4,7 @@ import winim/inc/windef
 {.compile: "../minhook/src/buffer.c"}
 {.compile: "../minhook/src/trampoline.c"}
 {.compile: "../minhook/src/hde/hde64.c"}
+{.compile: "../minhook/src/hde/hde32.c"}
 type                          ##  Unknown error. Should not be returned.
   MH_STATUS* = enum
     MH_UNKNOWN = -1,            ##  Successful.
