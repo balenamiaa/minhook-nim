@@ -12,7 +12,7 @@ proc uninit*() =
   if status != raw.MH_OK: raise newException(LibraryError,
       fmt"Uninitialization failed with {status}")
 
-proc hook*[T: ptr | proc | pointer](target: T, detour: T): T =
+proc hook*[T: ptr | proc | pointer | int | uint](target: T, detour: T): T =
   var originalFunction: T = nil
   let status = raw.MH_CreateHook(cast[LPVOID](target), cast[LPVOID](detour),
       cast[ptr LPVOID](addr originalFunction))
@@ -20,8 +20,8 @@ proc hook*[T: ptr | proc | pointer](target: T, detour: T): T =
       fmt"Hooking ({cast[uint](target)}) to (({cast[uint](detour)})) failed with {status}")
   originalFunction
 
-proc hook*[T: proc](target: ptr | pointer, detour: T): T = hook(cast[T](target), detour)
-proc hook*[T: proc](target: T, detour: ptr | pointer): T = hook(target, cast[T](detour))
+proc hook*[T: proc](target: ptr | pointer | int | uint, detour: T): T = hook(cast[T](target), detour)
+proc hook*[T: proc](target: T, detour: ptr | pointer | int | uint): T = hook(target, cast[T](detour))
 
 
 ## The macro declares a procedure of the same signature, and name `ogProcCall`, for calling the original procedure.
@@ -41,12 +41,26 @@ macro mHook*(x: untyped, procPtr: proc | pointer | ptr | int | uint, body: untyp
   )
   
   let symHkProc = genSym(nskProc)
+  let symOgProc = genSym(nskVar)
 
-  var bodyStatements = newNimNode(nnkStmtList).add(body)
+  var bodyStatements = nnkStmtList.newTree(
+    nnkProcDef.newTree(
+      "ogProcCall".ident,
+      newEmptyNode(),
+      newEmptyNode(),
+      procType[0].copy,
+      newEmptyNode(),
+      newEmptyNode(),
+      nnkCall.newTree(
+        symOgProc
+      ).add(x[1][1..^1].map(proc(x: auto): auto = x[0]))
+    ),
+    body
+  )
   result = nnkStmtList.newTree()
   result.add(nnkVarSection.newTree(nnkIdentDefs.newTree(
     nnkPragmaExpr.newTree(
-      newIdentNode("ogProcCall"),
+      symOgProc,
       nnkPragma.newTree("global".ident)
     ),
     procType,
@@ -66,14 +80,14 @@ macro mHook*(x: untyped, procPtr: proc | pointer | ptr | int | uint, body: untyp
     symOgProc = hook(procPtr, symHkProc)
     enableHook(procPtr)
 
-  result.add(getAst(doHooks(newIdentNode("ogProcCall"), symHkProc, procPtr)))
+  result.add(getAst(doHooks(symOgProc, symHkProc, procPtr)))
   
-proc enableHook*[T: ptr | proc | pointer](target: T) =
+proc enableHook*[T: ptr | proc | pointer | int | uint](target: T) =
   let status = raw.MH_EnableHook(cast[LPVOID](target))
   if status != raw.MH_OK: raise newException(LibraryError,
       fmt"Enabling hook ({cast[uint](target)}) failed with {status}")
 
-proc disableHook*[T: ptr | proc | pointer](target: T) =
+proc disableHook*[T: ptr | proc | pointer | int | uint](target: T) =
   let status = raw.MH_DisableHook(cast[LPVOID](target))
   if status != raw.MH_OK: raise newException(LibraryError,
       fmt"Disabling hook ({cast[uint](target)}) failed with {status}")
